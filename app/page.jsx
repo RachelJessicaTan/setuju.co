@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { ArrowDownRight, ArrowUp, Menu, Package, X } from 'lucide-react'
 
 const INSTAGRAM = 'https://www.instagram.com/setuju.co/'
 const SERVICES_DECK = 'https://bit.ly/SetujuServices'
@@ -34,6 +35,11 @@ const work = [
 
 const marquee = ['Branding','Content Strategy','Social Media Management','Product Photography','IG Ads','Influencer Outreach']
 
+// Lucide v1 dropped brand icons; this mirrors its Instagram glyph so it matches the rest of the set.
+function InstagramIcon({size=18, strokeWidth=1.5}) {
+  return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/></svg>
+}
+
 function Photo({id, alt, label, className='', sizes='100vw', pos='center', priority=false}) {
   return <div className={`ph ${className}`}>
     <img src={img(id)} srcSet={srcSet(id)} sizes={sizes} alt={alt} style={{objectPosition:pos}} loading={priority?'eager':'lazy'} fetchPriority={priority?'high':'auto'} decoding="async"/>
@@ -50,6 +56,10 @@ export default function Page(){
   const [activeService,setActiveService]=useState(0)
   const [scrolled,setScrolled]=useState(false)
   const [current,setCurrent]=useState('')
+  const [hidden,setHidden]=useState(false)
+  const [hover,setHover]=useState(null)
+  const [line,setLine]=useState({x:0,w:0,on:false})
+  const labels=useRef({})
   const root=useRef(null)
 
   useEffect(()=>{
@@ -58,34 +68,75 @@ export default function Page(){
     els.forEach(e=>io.observe(e))
     const spy=new IntersectionObserver(entries=>entries.forEach(e=>e.isIntersecting&&setCurrent(e.target.id)), {rootMargin:'-45% 0px -50% 0px'})
     document.querySelectorAll('main > section').forEach(s=>spy.observe(s))
+    let lastY=window.scrollY
     const onScroll=()=>{
-      document.documentElement.style.setProperty('--scroll', `${Math.min(window.scrollY,1200)}`)
-      setScrolled(window.scrollY>40)
+      const y=window.scrollY
+      document.documentElement.style.setProperty('--scroll', `${Math.min(y,1200)}`)
+      setScrolled(y>40)
+      if(Math.abs(y-lastY)>6){setHidden(y>lastY&&y>480);lastY=y}
     }
     onScroll()
     window.addEventListener('scroll',onScroll,{passive:true})
     return()=>{io.disconnect();spy.disconnect();window.removeEventListener('scroll',onScroll)}
   },[])
 
-  const go=(id)=>{setMenu(false);document.getElementById(id)?.scrollIntoView({behavior:'smooth'})}
+  // Slide the underline to the hovered link, falling back to the section in view.
+  useEffect(()=>{
+    const place=()=>{
+      const el=labels.current[hover||current]
+      setLine(l=>el?{x:el.offsetLeft,w:el.offsetWidth,on:true}:{...l,on:false})
+    }
+    place()
+    document.fonts?.ready.then(place)
+    window.addEventListener('resize',place)
+    return()=>window.removeEventListener('resize',place)
+  },[hover,current])
+
+  useEffect(()=>{
+    document.documentElement.style.overflow=menu?'hidden':''
+    const onKey=e=>e.key==='Escape'&&setMenu(false)
+    window.addEventListener('keydown',onKey)
+    return()=>window.removeEventListener('keydown',onKey)
+  },[menu])
+
+  const go=(id)=>{setMenu(false);document.documentElement.style.overflow='';document.getElementById(id)?.scrollIntoView({behavior:'smooth'})}
   const navItems=[['work','Work'],['services','Services'],['about','About'],['contact','Contact']]
   const s=services[activeService]
 
   return <main ref={root}>
-    <header className={`nav${scrolled?' scrolled':''}`}>
-      <button className="brand" onClick={()=>go('top')} aria-label="Setuju — back to top"><sup>se</sup>tuju</button>
-      <nav className={menu?'open':''} aria-label="Main">
-        {navItems.map(([id,label])=><button key={id} className={current===id?'current':''} aria-current={current===id?'true':undefined} onClick={()=>go(id)}>{label}</button>)}
-        <a className="nav-ig" href={INSTAGRAM} target="_blank" rel="noreferrer">Instagram ↗</a>
-      </nav>
-      <button className="menu" onClick={()=>setMenu(!menu)} aria-label="Menu" aria-expanded={menu}><span/><span/></button>
+    <header className={`nav${scrolled?' scrolled':''}${hidden&&!menu?' hidden':''}${menu?' menu-open':''}`}>
+      <div className="nav-inner">
+        <div className="brand-wrap">
+          <button className="brand" onClick={()=>go('top')} aria-label="Setuju — back to top">SETUJU</button>
+          <span className="brand-note">Social Media &amp;<br/>Branding Agency</span>
+        </div>
+        <nav className="nav-links" aria-label="Main" onMouseLeave={()=>setHover(null)}>
+          {navItems.map(([id,label])=><button key={id} className={current===id?'current':''} aria-current={current===id?'true':undefined} onMouseEnter={()=>setHover(id)} onFocus={()=>setHover(id)} onBlur={()=>setHover(null)} onClick={()=>go(id)}><span ref={el=>{labels.current[id]=el}}>{label}</span></button>)}
+          <i className="nav-line" style={{'--x':`${line.x}px`,'--w':`${line.w}px`,opacity:line.on?1:0}} aria-hidden="true"/>
+        </nav>
+        <div className="nav-actions">
+          <a className="nav-ig" href={INSTAGRAM} target="_blank" rel="noreferrer" aria-label="Setuju on Instagram"><InstagramIcon size={19}/></a>
+          <button className="menu" onClick={()=>setMenu(!menu)} aria-label={menu?'Close menu':'Open menu'} aria-expanded={menu} aria-controls="menu-panel"><span>{menu?'Close':'Menu'}</span>{menu?<X size={20} strokeWidth={1.5}/>:<Menu size={20} strokeWidth={1.5}/>}</button>
+        </div>
+      </div>
     </header>
+
+    <div id="menu-panel" className={`menu-panel${menu?' open':''}`} aria-hidden={!menu} inert={!menu}>
+      <nav aria-label="Mobile">
+        {navItems.map(([id,label],i)=><button key={id} className={current===id?'current':''} style={{'--i':i}} onClick={()=>go(id)}>{label}</button>)}
+      </nav>
+      <div className="menu-foot">
+        <a href={INSTAGRAM} target="_blank" rel="noreferrer"><InstagramIcon size={16}/>@setuju.co</a>
+        <a href={SERVICES_DECK} target="_blank" rel="noreferrer"><Package size={16} strokeWidth={1.5}/>Services &amp; packages</a>
+        <p>We make brands worth following.</p>
+      </div>
+    </div>
 
     <section id="top" className="hero">
       <div className="hero-copy">
         <div className="eyebrow">01 — Social Media &amp; Branding Agency</div>
         <h1>Branding Solution<br/>Partner for business,<br/><em>especially UMKM.</em></h1>
-        <button className="round-link" onClick={()=>go('work')}><span>Explore work</span><b>↘</b></button>
+        <button className="round-link" onClick={()=>go('work')}><span>Explore work</span><b><ArrowDownRight size={15} strokeWidth={1.5}/></b></button>
       </div>
       <div className="hero-image-wrap">
         <Photo id={photos.hero[0]} alt={photos.hero[1]} className="hero-image" sizes="(max-width:800px) 100vw, 46vw" pos="center 35%" priority/>
@@ -95,29 +146,30 @@ export default function Page(){
           <small>followers who trust us to make brands worth following.</small>
         </a>
       </div>
-      <div className="hero-foot"><span>Branding · Strategy · Social Media · Photography</span><span>Scroll to explore ↓</span></div>
+      <div className="hero-foot"><span>Branding · Strategy · Social Media · Photography</span><span>Scroll to explore</span></div>
     </section>
 
     <div className="marquee" aria-hidden="true">
-      <div>{[...marquee,...marquee].map((m,i)=><span key={i}>{m}<i>✦</i></span>)}</div>
+      <div>{[...marquee,...marquee].map((m,i)=><span key={i}>{m}<i/></span>)}</div>
     </div>
 
     <section className="intro section-pad">
       <Reveal className="section-index">02 / 06</Reveal>
       <div className="intro-grid">
         <Reveal><h2>Turning ideas<br/>into <em>meaningful</em><br/>brand experiences.</h2></Reveal>
-        <Reveal className="intro-side"><p><b>We make brands worth following.</b> Setuju is a Branding Solution Partner for business, especially UMKM — strategy, content &amp; social media management for brands that want to stay relevant.</p><button className="text-link" onClick={()=>go('services')}>Discover Setuju <span>↗</span></button></Reveal>
+        <Reveal className="intro-side"><p><b>We make brands worth following.</b> Setuju is a Branding Solution Partner for business, especially UMKM strategy, content &amp; social media management for brands that want to stay relevant.</p><button className="text-link" onClick={()=>go('services')}>Discover Setuju</button></Reveal>
       </div>
       <Reveal className="wide-image"><Photo id={photos.studio[0]} alt={photos.studio[1]} label="Fig. 01 — Inside the studio" pos="center 60%"/></Reveal>
       <Reveal className="client-row"><span>MEET OUR CLIENTS</span><div><b>SHOESTETIC</b><b>STRAPPIE</b><b>5TO5</b><b>BEAJOVE</b><b>ERHA</b><b>LO BAN TENG</b></div></Reveal>
     </section>
 
     <section id="services" className="services section-pad">
-      <Reveal className="section-index">03 / 06</Reveal>
-      <div className="section-head"><Reveal><h2>More than<br/><em>services.</em></h2></Reveal><Reveal><p>Setuju Services</p><a className="text-link" href={SERVICES_DECK} target="_blank" rel="noreferrer">See packages <span>↗</span></a></Reveal></div>
+      <Reveal className="section-index">03 / 06 — Setuju Services</Reveal>
+      <Reveal className="section-head"><h2>More than<br/><em>services.</em></h2></Reveal>
       <div className="service-layout">
         <div className="service-list">
-          {services.map((sv,i)=><button key={sv[0]} className={activeService===i?'active':''} onMouseEnter={()=>setActiveService(i)} onFocus={()=>setActiveService(i)} onClick={()=>setActiveService(i)}><small>{sv[0]}</small><span>{sv[1]}</span><span>{sv[2]}</span><span>{sv[3]}</span><b>↗</b></button>)}
+          {services.map((sv,i)=><button key={sv[0]} className={activeService===i?'active':''} onMouseEnter={()=>setActiveService(i)} onFocus={()=>setActiveService(i)} onClick={()=>setActiveService(i)}><small>{sv[0]}</small><span>{sv[1]}</span><span>{sv[2]}</span><span>{sv[3]}</span></button>)}
+          <a className="text-link service-more" href={SERVICES_DECK} target="_blank" rel="noreferrer">See all packages</a>
         </div>
         <div className="service-visual">
           <div key={activeService} className="service-visual-in">
@@ -129,13 +181,13 @@ export default function Page(){
     </section>
 
     <section id="work" className="work section-pad">
-      <Reveal className="section-index">04 / 06</Reveal>
-      <div className="section-head"><Reveal><h2>Let the work<br/><em>speak for itself.</em></h2></Reveal><Reveal><p>Selected Work</p></Reveal></div>
+      <Reveal className="section-index">04 / 06 — Selected Work</Reveal>
+      <Reveal className="section-head"><h2>Let the work<br/><em>speak for itself.</em></h2></Reveal>
       <div className="work-stack">
         {work.map((item,i)=><Reveal key={item[0]} className="work-item">
           <a className="work-image" href={INSTAGRAM} target="_blank" rel="noreferrer" aria-label={`${item[0]} — see more on Instagram`}>
             <Photo id={item[3]} alt={item[4]} pos={item[5]} sizes="(max-width:800px) 100vw, 1100px"/>
-            <span className="work-cta">View on Instagram ↗</span>
+            <span className="work-cta" aria-hidden="true"><InstagramIcon size={18}/></span>
           </a>
           <div className="work-meta"><div><span>{item[0]}</span><small>{item[1]}</small></div><span><em>{item[2]}</em> — 0{i+1} / 04</span></div>
         </Reveal>)}
@@ -143,8 +195,8 @@ export default function Page(){
     </section>
 
     <section className="photo section-pad">
-      <Reveal className="section-index">05 / 06</Reveal>
-      <div className="photo-head"><Reveal><h2>Every frame<br/>has a <em>purpose.</em></h2></Reveal><Reveal><p>Photography</p></Reveal></div>
+      <Reveal className="section-index">05 / 06 — Photography</Reveal>
+      <Reveal className="section-head"><h2>Every frame<br/>has a <em>purpose.</em></h2></Reveal>
       <div className="photo-grid">
         <Reveal className="photo-a"><Photo id={photos.product[0]} alt={photos.product[1]} label="Fig. 02" sizes="(max-width:800px) 100vw, 38vw"/></Reveal>
         <Reveal className="photo-b"><Photo id={photos.dessert[0]} alt={photos.dessert[1]} label="Fig. 03" sizes="(max-width:800px) 100vw, 28vw"/></Reveal>
@@ -167,13 +219,13 @@ export default function Page(){
         <Reveal><h2>Let's create<br/><em>something together.</em></h2></Reveal>
         <Reveal className="contact-image"><Photo id={photos.contact[0]} alt={photos.contact[1]} pos="center 55%"/></Reveal>
         <Reveal className="contact-links">
-          <a href={INSTAGRAM} target="_blank" rel="noreferrer"><small>Instagram</small><span>@setuju.co</span><b>↗</b></a>
-          <a href={SERVICES_DECK} target="_blank" rel="noreferrer"><small>Services &amp; packages</small><span>bit.ly/SetujuServices</span><b>↗</b></a>
+          <a href={INSTAGRAM} target="_blank" rel="noreferrer"><small>Instagram</small><span>@setuju.co</span><InstagramIcon size={22} strokeWidth={1.25}/></a>
+          <a href={SERVICES_DECK} target="_blank" rel="noreferrer"><small>Services &amp; packages</small><span>bit.ly/SetujuServices</span><Package size={22} strokeWidth={1.25}/></a>
         </Reveal>
-        <Reveal className="contact-bottom"><div><span className="brand"><sup>se</sup>tuju</span><p>We make brands worth following.<br/>Branding Solution Partner for business, especially UMKM.</p></div><button className="round-link" onClick={()=>window.scrollTo({top:0,behavior:'smooth'})}><span>Back to top</span><b>↑</b></button></Reveal>
+        <Reveal className="contact-bottom"><div><span>SETUJU</span><p>We make brands worth following.<br/>Branding Solution Partner for business, especially UMKM.</p></div><button className="round-link" onClick={()=>window.scrollTo({top:0,behavior:'smooth'})}><span>Back to top</span><b><ArrowUp size={15} strokeWidth={1.5}/></b></button></Reveal>
       </div>
     </section>
 
-    <footer><span>© {new Date().getFullYear()} Setuju</span><span>Social Media &amp; Branding Agency</span><a href={INSTAGRAM} target="_blank" rel="noreferrer">Instagram ↗</a></footer>
+    <footer><span>© {new Date().getFullYear()} Setuju</span><span>Social Media &amp; Branding Agency</span><a href={INSTAGRAM} target="_blank" rel="noreferrer" aria-label="Setuju on Instagram"><InstagramIcon size={16}/></a></footer>
   </main>
 }
